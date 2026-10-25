@@ -1,1 +1,214 @@
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06120b">
+<title>DOOM OS Mobile</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#06120b;color:#d7ffe5;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif}
+header{text-align:center;padding:28px 12px 20px;background:linear-gradient(#153f26,#06120b);border-bottom:1px solid #34824e}
+h1{margin:0;color:#62ff95;letter-spacing:6px;text-shadow:0 0 18px #23ff70;font-size:32px}
+.sub{font-size:10px;letter-spacing:2px;color:#99c7a7;margin-top:8px}
+main{max-width:700px;margin:auto;padding:14px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat,.panel{background:#0d2416;border:1px solid #29623e;border-radius:12px}
+.stat{text-align:center;padding:13px 3px}
+.stat strong{display:block;color:#64ff9b;font-size:14px}
+.stat small{font-size:9px;color:#a3bda9}
+.panel{margin-top:12px;padding:13px}
+.heading{color:#64ff9b;font-weight:bold;font-size:12px;letter-spacing:2px}
+#status{font-size:12px;color:#bad5c0;line-height:1.5;overflow-wrap:anywhere}
+#chat{height:38dvh;min-height:230px;overflow-y:auto;display:flex;flex-direction:column;gap:9px;padding:14px 0}
+.msg{padding:11px 13px;border-radius:11px;max-width:92%;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:14px}
+.bot{align-self:flex-start;background:#163a24;border:1px solid #2b7244}
+.user{align-self:flex-end;background:#244a31}
+.row{display:flex;gap:7px;margin-top:9px}
+input{flex:1;min-width:0;background:#07160c;border:1px solid #3a8152;color:#fff;border-radius:8px;padding:12px;font-size:16px}
+button{border:1px solid #54d980;background:#185b32;color:#fff;border-radius:8px;padding:11px;font-weight:bold;cursor:pointer}
+button:disabled{opacity:.5}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.wide{width:100%;margin-top:10px}
+small{color:#a6c5af}
+footer{text-align:center;padding:20px;color:#719a7e;font-size:10px}
+</style>
+</head>
+<body>
+<header>
+<h1>DOOM OS</h1>
+<div class="sub">SOVEREIGN INTELLIGENCE SYSTEM</div>
+</header>
+<main>
+<div class="grid">
+<div class="stat"><strong>LOCAL</strong><small>AI ENGINE</small></div>
+<div class="stat"><strong id="clock">--:--</strong><small>SYSTEM TIME</small></div>
+<div class="stat"><strong>GREEN</strong><small>ARMOR HUD</small></div>
+</div>
+<section class="panel">
+<div class="heading">AI CORE</div>
+<p id="status">AI not loaded. Tap INITIALIZE AI to download the model.</p>
+<button class="wide" id="load">INITIALIZE AI</button>
+<small>The model downloads into browser storage. It may take several minutes, and some iPhones may not have enough available memory. No API key is needed.</small>
+</section>
+<section class="panel">
+<div class="heading">DOOM CONSOLE</div>
+<div id="chat" aria-live="polite"></div>
+<div class="row">
+<input id="prompt" placeholder="Enter your command..." aria-label="Your message">
+<button id="send">SEND</button>
+</div>
+<div class="buttons">
+<button id="mic">MICROPHONE</button>
+<button id="voice">VOICE: ON</button>
+<button id="clear">CLEAR CHAT</button>
+<button id="stop">STOP VOICE</button>
+</div>
+</section>
+<section class="panel">
+<div class="heading">IPHONE COMMAND CENTER</div>
+<p><small>Enter the name of an Apple Shortcut you created in the Shortcuts app.</small></p>
+<div class="row">
+<input id="shortcut" placeholder="Shortcut name">
+<button id="run">RUN</button>
+</div>
+</section>
+<section class="panel">
+<div class="heading">SYSTEM INFORMATION</div>
+<p><small>DOOM OS runs as a website. Local AI needs a model download and enough device memory. Microphone input depends on browser support. Armor readings are not connected to hardware.</small></p>
+</section>
+</main>
+<footer>DOOM OS MOBILE • LOCAL AI EXPERIMENTAL</footer>
+<script type="module">
+const $=id=>document.getElementById(id);
+let generator=null;
+let loading=false;
+let busy=false;
+let voiceOn=true;
+let history=[];
+const system="You are DOOM OS, a fictional armored suit assistant. Speak concisely, calmly, and intelligently. Be helpful and truthful. Do not claim to control the phone, armor, or hardware. You may use occasional dramatic futuristic phrasing.";
+function status(t){$("status").textContent=t}
+function add(t,role){
+ const e=document.createElement("div");
+ e.className="msg "+role;
+ e.textContent=t;
+ $("chat").appendChild(e);
+ $("chat").scrollTop=$("chat").scrollHeight;
+}
+function speak(t){
+ if(!voiceOn||!("speechSynthesis" in window))return;
+ speechSynthesis.cancel();
+ const u=new SpeechSynthesisUtterance(t);
+ u.rate=.93;u.pitch=.87;
+ speechSynthesis.speak(u);
+}
+function updateClock(){
+ $("clock").textContent=new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+}
+updateClock();setInterval(updateClock,30000);
+add("DOOM OS interface online. Initialize the local AI core to begin real conversations.","bot");
+$("load").onclick=async()=>{
+ if(generator||loading)return;
+ loading=true;$("load").disabled=true;
+ status("Loading AI runtime...");
+ try{
+  const lib=await import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1");
+  status("Downloading local model. Please keep Safari open...");
+  generator=await lib.pipeline(
+   "text-generation",
+   "onnx-community/SmolLM2-135M-Instruct",
+   {device:"wasm",dtype:"q4",progress_callback:p=>{
+     if(p.status==="progress"&&p.progress!=null)
+      status("Downloading model: "+Math.round(p.progress)+"%");
+     else if(p.status==="initiate")
+      status("Preparing model files...");
+   }}
+  );
+  status("LOCAL AI READY. No API key required.");
+  $("load").textContent="AI ONLINE";
+  add("Local AI core initialized. Awaiting your commands.","bot");
+  speak("DOOM OS intelligence core online.");
+ }catch(e){
+  generator=null;
+  status("AI failed to load: "+String(e.message||e)+". Your iPhone or browser may not support this model, or memory/storage may be insufficient.");
+  $("load").disabled=false;
+ }finally{loading=false}
+};
+async function send(){
+ const t=$("prompt").value.trim();
+ if(!t||busy)return;
+ $("prompt").value="";
+ add(t,"user");
+ if(!generator){
+  add("The local AI is not running. Tap INITIALIZE AI first.","bot");
+  return;
+ }
+ busy=true;$("send").disabled=true;
+ status("AI is thinking on this device...");
+ try{
+  history.push({role:"user",content:t});
+  const messages=[
+   {role:"system",content:system},
+   ...history.slice(-8)
+  ];
+  const out=await generator(messages,{
+   max_new_tokens:110,
+   do_sample:true,
+   temperature:0.7,
+   repetition_penalty:1.12
+  });
+  const result=out[0].generated_text;
+  let reply="";
+  if(Array.isArray(result)){
+   const last=result[result.length-1];
+   reply=String(last.content||"");
+  }else{
+   reply=String(result||"").split("assistant").pop().trim();
+  }
+  if(!reply)throw Error("The model returned an empty response");
+  history.push({role:"assistant",content:reply});
+  add(reply,"bot");speak(reply);
+  status("LOCAL AI READY");
+ }catch(e){
+  history.pop();
+  add("AI generation error: "+String(e.message||e),"bot");
+  status("Generation failed. Try a shorter message.");
+ }finally{busy=false;$("send").disabled=false}
+}
+$("send").onclick=send;
+$("prompt").addEventListener("keydown",e=>{if(e.key==="Enter")send()});
+$("voice").onclick=()=>{
+ voiceOn=!voiceOn;
+ $("voice").textContent="VOICE: "+(voiceOn?"ON":"OFF");
+ if(!voiceOn&&"speechSynthesis" in window)speechSynthesis.cancel();
+};
+$("stop").onclick=()=>{
+ if("speechSynthesis" in window)speechSynthesis.cancel();
+};
+$("clear").onclick=()=>{
+ history=[];$("chat").replaceChildren();
+ add("Conversation cleared.","bot");
+};
+$("mic").onclick=()=>{
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(!SR){
+  alert("Speech recognition is not available in this browser. Use the keyboard microphone or type your message.");
+  return;
+ }
+ try{
+  const rec=new SR();
+  rec.lang="en-US";rec.interimResults=false;
+  rec.onresult=e=>{$("prompt").value=e.results[0][0].transcript};
+  rec.onerror=e=>status("Microphone: "+e.error+". You can still type.");
+  rec.start();
+ }catch(e){status("Microphone unavailable: "+e.message)}
+};
+$("run").onclick=()=>{
+ const name=$("shortcut").value.trim();
+ if(!name){alert("Enter an existing Apple Shortcut name.");return}
+ if(confirm("Open Apple Shortcuts and run "+name+"?"))
+  location.href="shortcuts://run-shortcut?name="+encodeURIComponent(name);
+};
+</script>
+</body>
+</html>
